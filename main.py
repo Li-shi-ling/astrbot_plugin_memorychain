@@ -53,7 +53,7 @@ class memorychain(Star):
         # )
 
     @memorychain.command("kbcr")
-    async def kb_create(self, event: AstrMessageEvent, kb_name):
+    async def kb_create(self, event: AstrMessageEvent, kb_name:str):
         await self.context.kb_manager.create_kb(
             kb_name = kb_name
         )
