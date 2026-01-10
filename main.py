@@ -115,11 +115,33 @@ class memorychain(Star):
         return all_kbs
 
     @memorychain.command("dkbdb")
-    async def del_kbs(self, event: AstrMessageEvent, kb_name:str):
+    async def del_kbs(self, event: AstrMessageEvent, db_name:str):
         """根据kb_id删除kb_db,用于清除由于bug产生的db数据库"""
         async with self.context.kb_manager.kb_db.get_db() as session:
-            kb = await self.context.kb_manager.kb_db.get_kb_by_name(kb_name)
+            kb = await self.context.kb_manager.kb_db.get_kb_by_name(db_name)
             await session.delete(kb)
             await session.commit()
-        yield event.plain_result(f"成功删除db数据库:{kb_name}")
-        logger.info(f"成功删除db数据库:{kb_name}")
+        yield event.plain_result(f"成功删除db数据库:{db_name}")
+        logger.info(f"成功删除db数据库:{db_name}")
+
+    @memorychain.command("dkb")
+    async def del_kb(self, event: AstrMessageEvent, kb_name:str):
+        """直接清理掉kb"""
+        kb_helper = await self.context.kb_manager.get_kb_by_name(kb_name)
+        if not kb_helper:
+            yield event.plain_result(f"kb:{kb_name} 不存在")
+            return
+        kb_id = kb_helper.kb.kb_id
+        await kb_helper.delete_vec_db()
+        async with self.context.kb_manager.kb_db.get_db() as session:
+            await session.delete(kb_helper.kb)
+            await session.commit()
+        self.context.kb_manager.kb_insts.pop(kb_id, None)
+        yield event.plain_result(f"kb:{kb_name} 成功删除")
+
+    @memorychain.command("reloadkbs")
+    async def re_load_kbs(self, event: AstrMessageEvent):
+        """重新加载所有数据库,防止错误操作导致的数据库检测不到"""
+        await self.context.kb_manager.load_kbs()
+        yield event.plain_result(f"成功重新加载所有数据库")
+        logger.info(f"成功重新加载所有数据库")
