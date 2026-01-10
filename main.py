@@ -78,3 +78,13 @@ class memorychain(Star):
         )
         yield event.plain_result(f"成功创建数据库:{kb_name}")
         logger.info(f"[memorychain] 成功创建数据库:{kb_name}")
+
+
+    @memorychain.command("kbcr_cs")
+    async def kb_create_cs(self, event: AstrMessageEvent, kb_name:str):
+        """创建数据库"""
+        await self.context.kb_manager.create_kb(
+            kb_name = kb_name
+        )
+        yield event.plain_result(f"成功创建数据库:{kb_name}")
+        logger.info(f"[memorychain] 成功创建数据库:{kb_name}")
