@@ -6,6 +6,7 @@ from astrbot.core.conversation_mgr import Conversation
 from astrbot.api.star import Context, Star, register
 from astrbot.api import AstrBotConfig, logger
 from astrbot.core.knowledge_base.kb_helper import KBHelper, KBDocument
+from astrbot.core.provider.provider import EmbeddingProvider
 
 @register("memorychain", "Lishining", "记忆链", "1.0.0")
 class memorychain(Star):
@@ -19,6 +20,7 @@ class memorychain(Star):
 
     @memorychain.command("kbn")
     async def get_kb_name(self, event: AstrMessageEvent):
+        """获取所有数据库"""
         kb_names = []
         for kb_helper in self.context.kb_manager.kb_insts.values():
             kb_names.append(kb_helper.kb.kb_name)
@@ -27,6 +29,7 @@ class memorychain(Star):
 
     @memorychain.command("kbnep")
     async def get_kb_name_epid(self, event: AstrMessageEvent):
+        """获取所有数据库以及其对应的编码器"""
         outputtext = []
         for kb_helper in self.context.kb_manager.kb_insts.values():
             outputtext.append(
@@ -37,6 +40,7 @@ class memorychain(Star):
 
     @memorychain.command("kbco")
     async def get_kb_count(self, event: AstrMessageEvent, kb_name:str):
+        """统计数据库的文档数量"""
         kb_helper: KBHelper|None  = await self.context.kb_manager.get_kb_by_name(kb_name)
         list_doc: list[KBDocument] = await kb_helper.list_documents()
         doc_names = []
@@ -52,10 +56,25 @@ class memorychain(Star):
         #
         # )
 
+    @memorychain.command("kbep")
+    async def get_ep(self, event: AstrMessageEvent):
+        """获取ep列表"""
+        ep_names = []
+        p_ids = list(self.context.provider_manager.inst_map.keys())
+        for p_id in p_ids:
+            providers = self.context.get_provider_by_id(p_id)
+            if isinstance(providers, EmbeddingProvider):
+                ep_names.append(p_id)
+        yield event.plain_result(f"能够使用的编码器列表:\n" + "\n".join(ep_names))
+        logger.info(f"[memorychain] 能够使用的编码器列表:\n" + "\n".join(ep_names))
+
+
     @memorychain.command("kbcr")
-    async def kb_create(self, event: AstrMessageEvent, kb_name:str):
+    async def kb_create(self, event: AstrMessageEvent, kb_name:str, ep_names:str):
+        """创建数据库"""
         await self.context.kb_manager.create_kb(
-            kb_name = kb_name
+            kb_name = kb_name,
+            embedding_provider_id = ep_names
         )
         yield event.plain_result(f"成功创建数据库:{kb_name}")
         logger.info(f"[memorychain] 成功创建数据库:{kb_name}")
