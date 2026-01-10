@@ -104,17 +104,22 @@ class memorychain(Star):
         all_kbs = []
         offset = 0
         batch_size = 100
-
         while True:
             batch = await db.list_kbs(offset=offset, limit=batch_size)
             if not batch:
                 break
             all_kbs.extend(batch)
-
-            # 如果返回的数量小于限制，说明已经取完
             if len(batch) < batch_size:
                 break
-
             offset += batch_size
-
         return all_kbs
+
+    @memorychain.command("dkbdb")
+    async def del_kbs(self, event: AstrMessageEvent, kb_name:str):
+        """根据kb_id删除kb_db,用于清除由于bug产生的db数据库"""
+        async with self.context.kb_manager.kb_db.get_db() as session:
+            kb = await self.context.kb_manager.kb_db.get_kb_by_name(kb_name)
+            await session.delete(kb)
+            await session.commit()
+        yield event.plain_result(f"成功删除db数据库:{kb_name}")
+        logger.info(f"成功删除db数据库:{kb_name}")
