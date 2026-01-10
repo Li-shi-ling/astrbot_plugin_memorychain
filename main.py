@@ -1,12 +1,12 @@
-# LLM 对话类
 from watchfiles import awatch
-
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.api.star import Context, Star, register
 from astrbot.api import AstrBotConfig, logger
 from astrbot.core.knowledge_base.kb_helper import KBHelper, KBDocument
 from astrbot.core.provider.provider import EmbeddingProvider
+from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+from astrbot.core.knowledge_base.models import KnowledgeBase
 
 @register("memorychain", "Lishining", "记忆链", "1.0.0")
 class memorychain(Star):
@@ -82,9 +82,39 @@ class memorychain(Star):
 
     @memorychain.command("kbcr_cs")
     async def kb_create_cs(self, event: AstrMessageEvent, kb_name:str):
-        """创建数据库"""
+        """创建数据库(测试版本)"""
         await self.context.kb_manager.create_kb(
             kb_name = kb_name
         )
         yield event.plain_result(f"成功创建数据库:{kb_name}")
         logger.info(f"[memorychain] 成功创建数据库:{kb_name}")
+
+    @memorychain.command("kbdb")
+    async def get_kbdb(self, event: AstrMessageEvent):
+        """获取所有kb_db里面的数据库"""
+        all_kbs = await self.get_all_kbs(self.context.kb_manager.kb_db)
+        output_kbs = []
+        for Kb in all_kbs:
+            output_kbs.append(f"id:{Kb.id},kb_id:{Kb.kb_id},kb_name:{Kb.kb_name}")
+        yield event.plain_result(f"所有kb_db数据库为:\n" + "\n".join(output_kbs))
+        logger.info(f"所有kb_db数据库为:\n" + "\n".join(output_kbs))
+
+    async def get_all_kbs(self, db: KBSQLiteDatabase) -> list[KnowledgeBase]:
+        """获取所有知识库"""
+        all_kbs = []
+        offset = 0
+        batch_size = 100
+
+        while True:
+            batch = await db.list_kbs(offset=offset, limit=batch_size)
+            if not batch:
+                break
+            all_kbs.extend(batch)
+
+            # 如果返回的数量小于限制，说明已经取完
+            if len(batch) < batch_size:
+                break
+
+            offset += batch_size
+
+        return all_kbs
