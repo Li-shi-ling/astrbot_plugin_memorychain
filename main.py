@@ -16,6 +16,8 @@ class memorychain(Star):
 
     @memorychain.command("cs")
     async def cs(self, event: AstrMessageEvent):
-        data = self.context.kb_manager.list_kbs()
-        yield event.plain_result(f"data:{data}")
-        logger.info(f"data:{data}")
+        data = []
+        for kb_helper in self.context.kb_manager.kb_insts.values():
+            data.append(kb_helper.kb.kb_name)
+        yield event.plain_result(f"data:{str(data)}")
+        logger.info(f"data:{str(data)}")
