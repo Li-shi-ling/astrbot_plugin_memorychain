@@ -24,7 +24,6 @@ class memorychain(Star):
         self.llm_fun = None
         self.ep_name = None
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command_group("memorychain")
     def memorychain(self):
         pass
@@ -192,7 +191,7 @@ class memorychain(Star):
                 relative_memory.append(f"{doc_name}:\n{context}")
         system_prompt = f'This following message is relative context for your response:\n\n{chr(10).join(relative_memory)}'
         req.system_prompt += system_prompt
-    
+
     @filter.on_llm_response()
     async def on_llm_response(self, event: AstrMessageEvent, req: LLMResponse):
         """在LLM响应后添加助手消息到历史"""
