@@ -7,15 +7,8 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import AstrBotConfig, logger
 from dataclasses import dataclass, field
-
-"""
-@filter.on_message()                # 收到消息时
-@filter.on_waiting_llm_request()    # 即将调用LLM时（在session lock之前）
-@filter.on_llm_request()            # LLM请求时（可以修改prompt）
-@filter.on_llm_response()           # LLM响应时（可以修改响应）
-@filter.on_session_end()            # 会话结束时
-@filter.on_astrbot_loaded()         # AstrBot加载完成时
-"""
+from typing import Callable
+import time
 
 @register("memorychain", "Lishining", "记忆链", "1.0.0")
 class memorychain(Star):
@@ -28,6 +21,8 @@ class memorychain(Star):
         self.compressed_sessions: set = set()
         self.compressor = SimpleChatCompressor(max_history, compress_threshold)
         self.bot_name = {}
+        self.llm_fun = None
+        self.ep_name = None
 
     @filter.command_group("memorychain")
     def memorychain(self):
@@ -49,6 +44,16 @@ class memorychain(Star):
         self.bot_name[sender_id.strip()] = bot_name.strip()
         yield event.plain_result(f"成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
         logger.info(f"[memorychain] 成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command_group("sep")
+    async def set_embedding_provider(self, event: AstrMessageEvent, ep_name: str):
+        """设置embeddingprovider提供商,如果不提供,将使用第一个提供商"""
+        embeddingprovider = self.context.provider_manager.inst_map.get(ep_name,None)
+        if not isinstance(embeddingprovider, EmbeddingProvider):
+            return event.plain_result("选择的提供商不为EmbeddingProvider,设置失败")
+        self.ep_name = ep_name
+        return event.plain_result(f"成功设置编码器为{self.ep_name}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("kbn")
@@ -87,8 +92,8 @@ class memorychain(Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("kbep")
-    async def get_ep(self, event: AstrMessageEvent):
-        """获取ep列表"""
+    async def get_embedding_provider(self, event: AstrMessageEvent):
+        """获取embeddingprovider列表"""
         ep_names = []
         p_ids = list(self.context.provider_manager.inst_map.keys())
         for p_id in p_ids:
@@ -174,11 +179,32 @@ class memorychain(Star):
         sender_id = str(event.get_sender_id())
         nickname = str(event.get_sender_name())
         user_message = event.message_str.strip()
-        if group_id is None:
-            self.compressor.add_message(sender_id, f"{nickname}({sender_id})", user_message)
+        is_private = group_id is None
+        if is_private:
+            await self.compressor.add_message(sender_id, f"{nickname}({sender_id})", user_message, self.llm_fun, is_user = True)
         else:
-            self.compressor.add_message(group_id, f"{nickname}({sender_id})", user_message)
-        # TODO 等我实现
+            await self.compressor.add_message(group_id, f"{nickname}({sender_id})", user_message, self.llm_fun, is_user = True)
+        if is_private:
+            kb_name = f"群{group_id}记忆链"
+        else:
+            kb_name = f"私聊{group_id}记忆链"
+        kb_helper: KBHelper | None = await self.context.kb_manager.get_kb_by_name(kb_name)
+        if kb_helper is None:
+            return
+        else:
+            relative_memory = []
+            results = await self.context.kb_manager.retrieve(
+                query = user_message,
+                kb_names = [kb_name]
+            )
+            results_dict = results["results"]
+            for result in results_dict:
+                doc_name = result.get("doc_name","")
+                context = result.get("content","")
+                relative_memory.append(f"{doc_name}:\n{context}")
+        system_prompt = f'This following message is relative context for your response:\n\n{chr(10).join(relative_memory)}'
+        req.system_prompt += system_prompt
+
 
     @filter.on_llm_response()
     async def on_llm_response(self, event: AstrMessageEvent, req: LLMResponse):
@@ -189,17 +215,61 @@ class memorychain(Star):
             return
         group_id = str(event.get_group_id())
         sender_id = str(event.get_sender_id())
+        is_private = group_id is None
         # LLM返回的消息
         assistant_response = req.completion_text.strip()
         # 添加LLM的聊天记录
-        if group_id is None:
+        if is_private:
             bot_name = self.bot_name.get(sender_id, "assistant")
-            self.compressor.add_message(sender_id, f"{bot_name}", assistant_response)
+            summary = await self.compressor.add_message(sender_id, f"{bot_name}", assistant_response, self.llm_fun)
         else:
             bot_name = self.bot_name.get(group_id, "assistant")
-            self.compressor.add_message(group_id, f"{bot_name}", assistant_response)
-        # TODO 等我实现
+            summary = await self.compressor.add_message(group_id, f"{bot_name}", assistant_response, self.llm_fun)
+        if summary:
+            if is_private:
+                kb_name = f"群{group_id}记忆链"
+                file_name = f"群{group_id}_{time.strftime('%Y年%m月%d日', time.localtime())}"
+            else:
+                kb_name = f"私聊{group_id}记忆链"
+                file_name = f"私聊{group_id}_{time.strftime('%Y年%m月%d日', time.localtime())}"
+            kb_helper: KBHelper | None = await self.context.kb_manager.get_kb_by_name(kb_name)
+            if kb_helper is None:
+                if self.ep_name is None:
+                    p_ids = list(self.context.provider_manager.inst_map.keys())
+                    for p_id in p_ids:
+                        providers = self.context.get_provider_by_id(p_id)
+                        if isinstance(providers, EmbeddingProvider):
+                            ep_name = p_id
+                            break
+                    else:
+                        raise RuntimeError("astrbot系统没有实例化的embeddingprovider,存储记忆失败")
+                else:
+                    ep_name = self.ep_name
+                kb_helper = await self.context.kb_manager.create_kb(
+                    kb_name = kb_name,
+                    embedding_provider_id = ep_name
+                )
+                logger.info(f"创建数据库:{kb_name}")
+            await self.upload_memory(
+                kb_helper = kb_helper,
+                file_name = file_name,
+                pre_chunked_text = [summary],
+                file_type = ".txt",
+                file_content = None
+            )
+            if is_private:
+                await self.compressor.del_message(sender_id)
+            else:
+                await self.compressor.del_message(group_id)
 
+    async def set_llm(self, provider_id: str):
+        async def llm_fun(text):
+            llm_resp = await self.context.llm_generate(
+                chat_provider_id=provider_id,  # 聊天模型 ID
+                prompt="Hello, world!",
+            )
+            return llm_resp.completion_text
+        self.llm_fun = llm_fun
 
     async def upload_memory_by_kb_name(
             self,
@@ -268,7 +338,7 @@ class CompressedChat:
     recent_messages: list[str] = field(default_factory=list)    # 最近几条消息
     message_count: int = 0                                      # 总消息数
 
-    def add_message(self, role: str, content: str, max_messages: int = 50):
+    def add_message(self, role: str, content: str, max_messages: int = 60):
         """添加新消息"""
         self.recent_messages.append(f"{role}: {content}")
         self.message_count += 1
@@ -292,22 +362,21 @@ class SimpleChatCompressor:
         self.compress_threshold = compress_threshold            # 压缩阈值
         self.compressed_chats: dict[str, CompressedChat] = {}   # {session_id: CompressedChat}
 
-    def add_message(self, session_id: str, role: str, content: str):
+    async def add_message(self, session_id: str, role: str, content: str, llm_fun: Callable | None, is_user: bool = False) -> str:
         """添加消息到会话"""
         if session_id not in self.compressed_chats:
             self.compressed_chats[session_id] = CompressedChat()
         chat = self.compressed_chats[session_id]
-        chat.add_message(role, content)
-        # 检查是否需要压缩
-        if chat.message_count >= self.compress_threshold:
-            self._compress_chat(session_id)
+        chat.add_message(role, content, self.max_history)
+        # 检查是否需要压缩,确保在AI回复时才进行压缩
+        if (not is_user) and (chat.message_count >= self.compress_threshold):
+            if llm_fun is None:
+                raise ValueError("llm_fun没有被设置")
+            summary = await llm_fun(chat.get_context_text())
+            # chat.clear_message()
+            return summary
+        return ""
 
-    def _compress_chat(self, session_id: str):
-        """压缩聊天记录"""
+    async def del_message(self, session_id: str):
         chat = self.compressed_chats[session_id]
-
-    def get_context(self, session_id: str) -> str:
-        """获取压缩后的上下文"""
-
-    def clear_session(self, session_id: str):
-        """清空会话记录"""
+        chat.clear_message()
