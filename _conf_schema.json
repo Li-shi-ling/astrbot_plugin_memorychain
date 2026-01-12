@@ -1,8 +1,44 @@
 {
-  "placeholder": {
-    "description": "占位符",
-    "type": "string",
-    "default": "",
+  "max_history": {
+    "description": "最大聊天历史数量",
+    "type": "int",
+    "default": 60,
+    "hint": "能够存储的最大聊天历史数量"
+  },
+  "compress_threshold": {
+    "description": "记忆压缩聊天历史数量阈值",
+    "type": "int",
+    "default": 50,
+    "hint": "到达这个值就进行压缩"
+  },
+  "chunk_size": {
+    "description": "数据库配置,非必须请使用默认",
+    "type": "int",
+    "default": 512,
+    "hint": ""
+  },
+  "chunk_overlap": {
+    "description": "数据库配置,非必须请使用默认",
+    "type": "int",
+    "default": 50,
+    "hint": ""
+  },
+  "batch_size": {
+    "description": "数据库配置,非必须请使用默认",
+    "type": "int",
+    "default": 32,
+    "hint": ""
+  },
+  "tasks_limit": {
+    "description": "数据库配置,非必须请使用默认",
+    "type": "int",
+    "default": 3,
+    "hint": ""
+  },
+  "max_retries": {
+    "description": "数据库配置,非必须请使用默认",
+    "type": "int",
+    "default": 3,
     "hint": ""
   }
 }
