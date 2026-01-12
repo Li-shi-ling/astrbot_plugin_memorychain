@@ -1,28 +1,96 @@
+from astrbot.core.provider.provider import EmbeddingProvider, Provider
 from astrbot.core.knowledge_base.kb_helper import KBHelper, KBDocument
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.api.provider import ProviderRequest, LLMResponse
 from astrbot.core.knowledge_base.models import KnowledgeBase
-from astrbot.core.provider.provider import EmbeddingProvider
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import AstrBotConfig, logger
+from typing import Callable, Dict, Optional
 from dataclasses import dataclass, field
-from typing import Callable
+from astrbot.api.star import StarTools
+import aiofiles
+import asyncio
+import json
 import time
+import os
+
 
 @register("memorychain", "Lishining", "记忆链", "1.0.0")
 class memorychain(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.Config = config
-        max_history = self.Config.get("max_history" , 60)
-        compress_threshold = self.Config.get("compress_threshold" , 50)
+
+        # 使用框架提供的标准数据目录
+        self.data_dir = str(StarTools.get_data_dir())
+
+        # 配置参数
+        max_history = self.Config.get("max_history", 60)
+        compress_threshold = self.Config.get("compress_threshold", 50)
         self.enabled = self.Config.get("enabled", 0) == 1
+
+        # 数据文件路径
+        self.data_file = os.path.join(self.data_dir, "memorychain_data.json")
+
+        # 初始化内存中的数据
         self.compressed_sessions: set = set()
         self.compressor = SimpleChatCompressor(max_history, compress_threshold)
-        self.bot_name = {}
-        self.llm_fun = None
-        self.ep_name = None
+
+        # 需要持久化的数据
+        self.bot_name: Dict[str, str] = {}
+        self.llm_name: Optional[str] = None
+        self.llm_fun: Optional[Callable] = None
+        self.ep_name: Optional[str] = None
+
+        # 加载持久化数据
+        asyncio.create_task(self._load_data())
+
+    async def _load_data(self):
+        """异步加载持久化数据"""
+        try:
+            if os.path.exists(self.data_file):
+                async with aiofiles.open(self.data_file, 'r', encoding='utf-8') as f:
+                    content = await f.read()
+                    if content.strip():
+                        data = json.loads(content)
+                        self.bot_name = data.get("bot_name", {})
+                        self.llm_name = data.get("llm_name")
+                        self.ep_name = data.get("ep_name")
+                        logger.info("[memorychain] 持久化数据加载成功")
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"[memorychain] 加载持久化数据失败: {e}")
+        except Exception as e:
+            logger.error(f"[memorychain] 加载数据时发生未知错误: {e}")
+
+    async def _save_data(self):
+        """异步保存持久化数据"""
+        try:
+            # 准备要保存的数据
+            data = {
+                "bot_name": self.bot_name,
+                "llm_name": self.llm_name,
+                "ep_name": self.ep_name,
+                "last_updated": time.time()
+            }
+
+            # 确保数据目录存在
+            os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
+
+            # 异步写入文件
+            async with aiofiles.open(self.data_file, 'w', encoding='utf-8') as f:
+                await f.write(json.dumps(data, indent=4, ensure_ascii=False))
+
+            logger.debug("[memorychain] 持久化数据保存成功")
+        except OSError as e:
+            logger.error(f"[memorychain] 保存持久化数据失败: {e}")
+        except Exception as e:
+            logger.error(f"[memorychain] 保存数据时发生未知错误: {e}")
+
+    async def terminate(self):
+        """插件终止时自动保存数据"""
+        await self._save_data()
+        logger.info("[memorychain] 插件终止，数据已保存")
 
     @filter.command_group("memorychain")
     def memorychain(self):
@@ -32,14 +100,41 @@ class memorychain(Star):
     async def set_bot_name(self, event: AstrMessageEvent, sender_id: str, bot_name: str):
         """设置bot名称,默认为assistant,sender_id如果为私聊为个人qq号,如果为群聊为群聊号,如果不设置可能会导致AI不能够正确认识自己"""
         self.bot_name[sender_id.strip()] = bot_name.strip()
+        await self._save_data()
         yield event.plain_result(f"成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
         logger.info(f"[memorychain] 成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
+
+    @memorychain.command("sllm")
+    async def set_llm(self, event: AstrMessageEvent, llm_name: str):
+        """配置上下文压缩使用的llm"""
+        llmprovider = self.context.provider_manager.inst_map.get(llm_name,None)
+        if not isinstance(llmprovider, Provider):
+            yield event.plain_result("选择的提供商不为Provider,设置失败")
+            return
+        self.llm_name = llm_name
+        await self._save_data()
+        sender_id = str(event.get_group_id() or event.get_sender_id())
+        yield event.plain_result(f"成功设置{sender_id.strip()}的llm供应商为{llm_name}")
+        logger.info(f"[memorychain] 成功设置{sender_id.strip()}的llm供应商为{llm_name}")
+
+    @memorychain.command("llm")
+    async def get_llm(self, event: AstrMessageEvent):
+        """获取所有能用的llm"""
+        llm_names = []
+        p_ids = list(self.context.provider_manager.inst_map.keys())
+        for p_id in p_ids:
+            providers = self.context.get_provider_by_id(p_id)
+            if isinstance(providers, Provider):
+                llm_names.append(p_id)
+        yield event.plain_result(f"能够使用的llm提供列表:\n" + "\n".join(llm_names))
+        logger.info(f"[memorychain] 能够使用的llm提供列表:\n" + "\n".join(llm_names))
 
     @memorychain.command("sbnf")
     async def set_bot_name_for(self, event: AstrMessageEvent, bot_name: str):
         """在当前聊天设置bot名称,默认为assistant,如果不设置可能会导致AI不能够正确认识自己"""
         sender_id = str(event.get_group_id() or event.get_sender_id())
         self.bot_name[sender_id.strip()] = bot_name.strip()
+        await self._save_data()
         yield event.plain_result(f"成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
         logger.info(f"[memorychain] 成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
 
@@ -48,9 +143,11 @@ class memorychain(Star):
         """设置embeddingprovider提供商,如果不提供,将使用第一个提供商"""
         embeddingprovider = self.context.provider_manager.inst_map.get(ep_name,None)
         if not isinstance(embeddingprovider, EmbeddingProvider):
-            return event.plain_result("选择的提供商不为EmbeddingProvider,设置失败")
+            yield event.plain_result("选择的提供商不为EmbeddingProvider,设置失败")
+            return
         self.ep_name = ep_name
-        return event.plain_result(f"成功设置编码器为{self.ep_name}")
+        await self._save_data()
+        yield event.plain_result(f"成功设置编码器为{self.ep_name}")
 
     @memorychain.command("kbn")
     async def get_kb_name(self, event: AstrMessageEvent):
@@ -248,11 +345,11 @@ class memorychain(Star):
             else:
                 await self.compressor.del_message(group_id)
 
-    async def set_llm(self, provider_id: str):
+    async def _set_llm(self, provider_id: str):
         async def llm_fun(text):
             llm_resp = await self.context.llm_generate(
                 chat_provider_id=provider_id,  # 聊天模型 ID
-                prompt="Hello, world!",
+                prompt=text,
             )
             return llm_resp.completion_text
         self.llm_fun = llm_fun
