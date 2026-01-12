@@ -28,14 +28,14 @@ class memorychain(Star):
     def memorychain(self):
         pass
 
-    @filter.command_group("sbn")
+    @memorychain.command("sbn")
     async def set_bot_name(self, event: AstrMessageEvent, sender_id: str, bot_name: str):
         """设置bot名称,默认为assistant,sender_id如果为私聊为个人qq号,如果为群聊为群聊号,如果不设置可能会导致AI不能够正确认识自己"""
         self.bot_name[sender_id.strip()] = bot_name.strip()
         yield event.plain_result(f"成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
         logger.info(f"[memorychain] 成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
 
-    @filter.command_group("sbnf")
+    @memorychain.command("sbnf")
     async def set_bot_name_for(self, event: AstrMessageEvent, bot_name: str):
         """在当前聊天设置bot名称,默认为assistant,如果不设置可能会导致AI不能够正确认识自己"""
         sender_id = str(event.get_group_id() or event.get_sender_id())
@@ -43,7 +43,7 @@ class memorychain(Star):
         yield event.plain_result(f"成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
         logger.info(f"[memorychain] 成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
 
-    @filter.command_group("sep")
+    @memorychain.command("sep")
     async def set_embedding_provider(self, event: AstrMessageEvent, ep_name: str):
         """设置embeddingprovider提供商,如果不提供,将使用第一个提供商"""
         embeddingprovider = self.context.provider_manager.inst_map.get(ep_name,None)
