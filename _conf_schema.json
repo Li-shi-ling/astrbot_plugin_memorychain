@@ -11,6 +11,12 @@
     "default": 50,
     "hint": "到达这个值就进行压缩"
   },
+  "enabled": {
+    "description": "是否开启,请在完成配置后启动",
+    "type": "int",
+    "default": 0,
+    "hint": "(0:否,1:是)"
+  },
   "chunk_size": {
     "description": "数据库配置,非必须请使用默认",
     "type": "int",
