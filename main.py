@@ -24,11 +24,11 @@ class memorychain(Star):
         self.llm_fun = None
         self.ep_name = None
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command_group("memorychain")
     def memorychain(self):
         pass
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command_group("sbn")
     async def set_bot_name(self, event: AstrMessageEvent, sender_id: str, bot_name: str):
         """设置bot名称,默认为assistant,sender_id如果为私聊为个人qq号,如果为群聊为群聊号,如果不设置可能会导致AI不能够正确认识自己"""
@@ -36,7 +36,6 @@ class memorychain(Star):
         yield event.plain_result(f"成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
         logger.info(f"[memorychain] 成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command_group("sbnf")
     async def set_bot_name_for(self, event: AstrMessageEvent, bot_name: str):
         """在当前聊天设置bot名称,默认为assistant,如果不设置可能会导致AI不能够正确认识自己"""
@@ -45,7 +44,6 @@ class memorychain(Star):
         yield event.plain_result(f"成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
         logger.info(f"[memorychain] 成功设置{sender_id.strip()}的bot名称为{bot_name.strip()}")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command_group("sep")
     async def set_embedding_provider(self, event: AstrMessageEvent, ep_name: str):
         """设置embeddingprovider提供商,如果不提供,将使用第一个提供商"""
@@ -55,7 +53,6 @@ class memorychain(Star):
         self.ep_name = ep_name
         return event.plain_result(f"成功设置编码器为{self.ep_name}")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("kbn")
     async def get_kb_name(self, event: AstrMessageEvent):
         """获取所有数据库"""
@@ -65,7 +62,6 @@ class memorychain(Star):
         yield event.plain_result(f"可用数据库:\n" + "\n".join(kb_names))
         logger.info(f"[memorychain] 可用数据库:\n" + "\n".join(kb_names))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("kbnep")
     async def get_kb_name_epid(self, event: AstrMessageEvent):
         """获取所有数据库以及其对应的编码器"""
@@ -77,7 +73,6 @@ class memorychain(Star):
         yield event.plain_result(f"可用数据库:\n" + "\n".join(outputtext))
         logger.info(f"[memorychain] 可用数据库:\n" + "\n".join(outputtext))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("kbco")
     async def get_kb_count(self, event: AstrMessageEvent, kb_name: str):
         """统计数据库的文档数量"""
@@ -90,7 +85,6 @@ class memorychain(Star):
         logger.info(f"[memorychain] kb_name:{kb_name}, 共{len(doc_names)}个文档")
         logger.info("文档列表:\n" + "\n".join(doc_names))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("kbep")
     async def get_embedding_provider(self, event: AstrMessageEvent):
         """获取embeddingprovider列表"""
@@ -103,7 +97,6 @@ class memorychain(Star):
         yield event.plain_result(f"能够使用的编码器列表:\n" + "\n".join(ep_names))
         logger.info(f"[memorychain] 能够使用的编码器列表:\n" + "\n".join(ep_names))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("kbcr")
     async def kb_create(self, event: AstrMessageEvent, kb_name: str, ep_names: str):
         """创建数据库"""
@@ -114,7 +107,6 @@ class memorychain(Star):
         yield event.plain_result(f"成功创建数据库:{kb_name}")
         logger.info(f"[memorychain] 成功创建数据库:{kb_name}")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("kbcr_cs")
     async def kb_create_cs(self, event: AstrMessageEvent, kb_name: str):
         """创建数据库(测试版本)"""
@@ -124,7 +116,6 @@ class memorychain(Star):
         yield event.plain_result(f"成功创建数据库:{kb_name}")
         logger.info(f"[memorychain] 成功创建数据库:{kb_name}")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("kbdb")
     async def get_kbdb(self, event: AstrMessageEvent):
         """获取所有kb_db里面的数据库"""
@@ -135,7 +126,6 @@ class memorychain(Star):
         yield event.plain_result(f"所有kb_db数据库为:\n" + "\n".join(output_kbs))
         logger.info(f"所有kb_db数据库为:\n" + "\n".join(output_kbs))
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("dkbdb")
     async def del_kbs(self, event: AstrMessageEvent, db_name: str):
         """根据db_name删除kb_db,用于清除由于bug产生的db数据库"""
@@ -146,7 +136,6 @@ class memorychain(Star):
         yield event.plain_result(f"成功删除db数据库:{db_name}")
         logger.info(f"成功删除db数据库:{db_name}")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("dkb")
     async def del_kb(self, event: AstrMessageEvent, kb_name: str):
         """直接清理掉kb"""
@@ -162,7 +151,6 @@ class memorychain(Star):
         self.context.kb_manager.kb_insts.pop(kb_id, None)
         yield event.plain_result(f"kb:{kb_name} 成功删除")
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @memorychain.command("reloadkbs")
     async def re_load_kbs(self, event: AstrMessageEvent):
         """重新加载所有数据库,防止错误操作导致的数据库检测不到"""
@@ -204,8 +192,7 @@ class memorychain(Star):
                 relative_memory.append(f"{doc_name}:\n{context}")
         system_prompt = f'This following message is relative context for your response:\n\n{chr(10).join(relative_memory)}'
         req.system_prompt += system_prompt
-
-
+    
     @filter.on_llm_response()
     async def on_llm_response(self, event: AstrMessageEvent, req: LLMResponse):
         """在LLM响应后添加助手消息到历史"""
