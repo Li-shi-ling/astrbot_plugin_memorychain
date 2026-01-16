@@ -55,8 +55,8 @@ class memorychain(Star):
                     if content.strip():
                         data = json.loads(content)
                         self.bot_name = data.get("bot_name", {})
-                        self.llm_name = data.get("llm_name")
-                        self.ep_name = data.get("ep_name")
+                        self.llm_name = data.get("llm_name", None)
+                        self.ep_name = data.get("ep_name", None)
                         logger.info("[memorychain] 持久化数据加载成功")
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"[memorychain] 加载持久化数据失败: {e}")
@@ -92,6 +92,16 @@ class memorychain(Star):
         await self._save_data()
         logger.info("[memorychain] 插件终止，数据已保存")
 
+    async def initialize(self):
+        await self._load_data()
+        if self.llm_name is None:
+            logger.info("[memorychain] 没有配置llm_name,请尽快配置")
+        else:
+            try:
+                await self._set_llm(self.llm_name)
+            except:
+                logger.info("[memorychain] 没有配置llm_name失败,请手动配置")
+
     @filter.command_group("memorychain")
     def memorychain(self):
         pass
@@ -112,6 +122,7 @@ class memorychain(Star):
             yield event.plain_result("选择的提供商不为Provider,设置失败")
             return
         self.llm_name = llm_name
+        await self._set_llm(self.llm_name)
         await self._save_data()
         sender_id = str(event.get_group_id() or event.get_sender_id())
         yield event.plain_result(f"成功设置{sender_id.strip()}的llm供应商为{llm_name}")
@@ -337,7 +348,7 @@ class memorychain(Star):
                 kb_helper = kb_helper,
                 file_name = file_name,
                 pre_chunked_text = [summary],
-                file_type = ".txt",
+                file_type = "txt",
                 file_content = None
             )
             if is_private:
@@ -380,7 +391,7 @@ class memorychain(Star):
             kb_helper: KBHelper,                # 数据库管理类
             file_name: str,                     # 文件名称
             pre_chunked_text: list[str],        # 切割好的文本块
-            file_type: str = ".txt",            # 默认采用txt格式上传
+            file_type: str = "txt",            # 默认采用txt格式上传
             file_content: bytes | None = None,  # 如果为文件传输
     ):
         chunk_size = int(self.Config.get("chunk_size", 512))
