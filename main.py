@@ -10,11 +10,9 @@ from typing import Callable, Dict, Optional
 from dataclasses import dataclass, field
 from astrbot.api.star import StarTools
 import aiofiles
-import asyncio
 import json
 import time
 import os
-
 
 @register("memorychain", "Lishining", "记忆链", "1.0.0")
 class memorychain(Star):
@@ -42,9 +40,6 @@ class memorychain(Star):
         self.llm_name: Optional[str] = None
         self.llm_fun: Optional[Callable] = None
         self.ep_name: Optional[str] = None
-
-        # 加载持久化数据
-        asyncio.create_task(self._load_data())
 
     async def _load_data(self):
         """异步加载持久化数据"""
@@ -280,9 +275,9 @@ class memorychain(Star):
         else:
             await self.compressor.add_message(group_id, f"{nickname}({sender_id})", user_message, self.llm_fun, is_user = True)
         if is_private:
-            kb_name = f"群{group_id}记忆链"
-        else:
             kb_name = f"私聊{group_id}记忆链"
+        else:
+            kb_name = f"群{group_id}记忆链"
         kb_helper: KBHelper | None = await self.context.kb_manager.get_kb_by_name(kb_name)
         if kb_helper is None:
             return
@@ -321,11 +316,11 @@ class memorychain(Star):
             summary = await self.compressor.add_message(group_id, f"{bot_name}", assistant_response, self.llm_fun)
         if summary:
             if is_private:
-                kb_name = f"群{group_id}记忆链"
-                file_name = f"群{group_id}_{time.strftime('%Y年%m月%d日', time.localtime())}"
-            else:
                 kb_name = f"私聊{group_id}记忆链"
                 file_name = f"私聊{group_id}_{time.strftime('%Y年%m月%d日', time.localtime())}"
+            else:
+                kb_name = f"群{group_id}记忆链"
+                file_name = f"群{group_id}_{time.strftime('%Y年%m月%d日', time.localtime())}"
             kb_helper: KBHelper | None = await self.context.kb_manager.get_kb_by_name(kb_name)
             if kb_helper is None:
                 if self.ep_name is None:
